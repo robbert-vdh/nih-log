@@ -1,7 +1,7 @@
 //! The logger implementation itself. These are implementation details not exposed in the public
 //! API.
 
-use log::LevelFilter;
+use log::{LevelFilter, Log};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -100,5 +100,20 @@ impl OutputTargetImpl {
         let file = File::options().create(true).append(true).open(path)?;
 
         Ok(Self::File(BufWriter::new(file)))
+    }
+}
+
+impl Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        // TODO: Add crate/module filters
+        metadata.level() <= self.max_log_level
+    }
+
+    fn log(&self, record: &log::Record) {
+        todo!()
+    }
+
+    fn flush(&self) {
+        todo!()
     }
 }

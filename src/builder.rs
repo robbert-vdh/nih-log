@@ -1,10 +1,11 @@
 ///! A builder interface for the logger.
-use log::{LevelFilter, SetLoggerError};
+use log::LevelFilter;
 use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
 
 use crate::logger::{Logger, OutputTargetImpl};
+use crate::LOGGER_INSTANCE;
 
 /// Constructs an NIH-log logger.
 #[derive(Debug)]
@@ -65,6 +66,22 @@ impl Display for SetTargetError {
     }
 }
 
+/// An error raised when setting a logger after one has already been set.
+// This is the same as `log::SetLoggerError`, except that we can create one ourselves.
+#[derive(Debug)]
+pub struct SetLoggerError(());
+
+impl Error for SetLoggerError {}
+
+impl Display for SetLoggerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Tried to set a global logger after one has already been configured"
+        )
+    }
+}
+
 impl LoggerBuilder {
     /// Create a builder for a logger. The logger can be installed using the
     /// [`build_global()`][Self::build_global()] function.
@@ -77,19 +94,30 @@ impl LoggerBuilder {
 
     /// Install the configured logger as the global logger. The global logger can only be set once.
     pub fn build_global(self) -> Result<(), SetLoggerError> {
-        // Picking an output target happens in three steps:
-        // - If `LoggerBuilder::with_output_target()` was called, that target is used.
-        // - If the `NIH_LOG` environment variable is non-empty, then that is parsed.
-        // - Otherwise a dynamic target is used that writes to either STDERR or a WinDbg debugger
-        //   depending on whether a Windows debugger is present.
-        Logger {
-            max_log_level: self.max_log_level,
+        let max_log_level = self.max_log_level;
+        let logger = Logger {
+            max_log_level,
+            // Picking an output target happens in three steps:
+            // - If `LoggerBuilder::with_output_target()` was called, that target is used.
+            // - If the `NIH_LOG` environment variable is non-empty, then that is parsed.
+            // - Otherwise a dynamic target is used that writes to either STDERR or a WinDbg
+            //   debugger depending on whether a Windows debugger is present.
             output_target: self
                 .output_target
-                .unwrap_or_else(|| OutputTargetImpl::default_from_environment()),
+                .unwrap_or_else(OutputTargetImpl::default_from_environment),
         };
 
-        todo!()
+        // We store a global logger instance and then set a static reference to that as the global
+        // logger. This way we can access the global logger instance later if it needs to be
+        // reconfigured at runtime
+        match LOGGER_INSTANCE.try_insert(logger) {
+            Ok(logger_instance) => {
+                log::set_logger(logger_instance).map_err(|_| SetLoggerError(()))?;
+                log::set_max_level(max_log_level);
+                Ok(())
+            }
+            Err(_) => Err(SetLoggerError(())),
+        }
     }
 
     /// Explicitly set the otuput target for the logger. This is normally set using the `NIH_LOG`

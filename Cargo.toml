@@ -10,3 +10,4 @@ repository = "https://github.com/robbert-vdh/nih-log"
 
 [dependencies]
 log = "0.4.17"
+once_cell = "1.17.1"
