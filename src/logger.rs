@@ -1,5 +1,7 @@
-//! The logger implementation itself.
+//! The logger implementation itself. These are implementation details not exposed in the public
+//! API.
 
+use log::LevelFilter;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -9,6 +11,9 @@ const NIH_LOG_ENV: &str = "NIH_LOG";
 
 /// The NIH-log logger. Construct one using the [`LoggerBuilder`].
 pub struct Logger {
+    /// The maximum log level filter. This is already set globally using [`log::set_max_level()`]
+    /// but it's probably a good idea to check it again regardless.
+    pub max_log_level: LevelFilter,
     /// The output target for the logger. This may be overwritten at runtime depending on the value
     /// of [`OutputTargetImpl::overwritable()`].
     pub output_target: OutputTargetImpl,

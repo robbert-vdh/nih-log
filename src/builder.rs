@@ -1,5 +1,5 @@
 ///! A builder interface for the logger.
-use log::SetLoggerError;
+use log::{LevelFilter, SetLoggerError};
 use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -7,8 +7,10 @@ use std::path::PathBuf;
 use crate::logger::{Logger, OutputTargetImpl};
 
 /// Constructs an NIH-log logger.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct LoggerBuilder {
+    /// The maximum log level. Set when constructing the builder.
+    pub max_log_level: LevelFilter,
     /// An explicitly set output target. When writing to a file this already contains the writer for
     /// the file to ensure that it can actually be written to when the logger is created.
     output_target: Option<OutputTargetImpl>,
@@ -64,6 +66,15 @@ impl Display for SetTargetError {
 }
 
 impl LoggerBuilder {
+    /// Create a builder for a logger. The logger can be installed using the
+    /// [`build_global()`][Self::build_global()] function.
+    pub fn new(max_log_level: LevelFilter) -> Self {
+        Self {
+            max_log_level,
+            output_target: None,
+        }
+    }
+
     /// Install the configured logger as the global logger. The global logger can only be set once.
     pub fn build_global(self) -> Result<(), SetLoggerError> {
         // Picking an output target happens in three steps:
@@ -72,6 +83,7 @@ impl LoggerBuilder {
         // - Otherwise a dynamic target is used that writes to either STDERR or a WinDbg debugger
         //   depending on whether a Windows debugger is present.
         Logger {
+            max_log_level: self.max_log_level,
             output_target: self
                 .output_target
                 .unwrap_or_else(|| OutputTargetImpl::default_from_environment()),

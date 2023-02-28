@@ -9,3 +9,4 @@ description = "A flexible logger tailormade for the NIH-plug plugin framework"
 repository = "https://github.com/robbert-vdh/nih-log"
 
 [dependencies]
+log = "0.4.17"
