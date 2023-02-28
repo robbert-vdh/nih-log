@@ -1,0 +1,11 @@
+[package]
+name = "nih_log"
+version = "0.1.0"
+edition = "2021"
+authors = ["Robbert van der Helm <mail@robbertvanderhelm.nl>"]
+license = "ISC"
+
+description = "A flexible logger tailormade for the NIH-plug plugin framework"
+repository = "https://github.com/robbert-vdh/nih-log"
+
+[dependencies]
