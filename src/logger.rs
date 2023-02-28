@@ -53,17 +53,11 @@ impl OutputTargetImpl {
     }
 
     /// Whether to use ANSI colors when writing to the target.
-    pub fn colors(&self) -> bool {
+    pub fn colorize(&self) -> bool {
         match self {
-            OutputTargetImpl::Stderr
-                if todo!("check if we're outputting to a supported terminal") =>
-            {
-                true
-            }
-            OutputTargetImpl::StderrOrWinDbg
-                if todo!("not outputting to windb, and STDERR is from a supported terminal") =>
-            {
-                true
+            OutputTargetImpl::Stderr => Self::stderr_supports_colors(),
+            OutputTargetImpl::StderrOrWinDbg if !Self::windbg_attached() => {
+                Self::stderr_supports_colors()
             }
             _ => false,
         }
@@ -100,6 +94,36 @@ impl OutputTargetImpl {
         let file = File::options().create(true).append(true).open(path)?;
 
         Ok(Self::File(BufWriter::new(file)))
+    }
+
+    /// Whether STDERR is a real TTY or not. Respects the `CLICOLOR`, `CLICOLOR_FORCE`, and
+    /// `NO_COLOR` environment variables.
+    fn stderr_supports_colors() -> bool {
+        if let Ok(value) = std::env::var("CLICOLOR_FORCE") {
+            if value.trim() != "0" {
+                return true;
+            }
+        }
+
+        if let Ok(value) = std::env::var("NO_COLOR") {
+            if value.trim() != "0" {
+                return false;
+            }
+        }
+
+        if let Ok(value) = std::env::var("CLICOLOR") {
+            if value.trim() == "0" {
+                return false;
+            }
+        }
+
+        // If `CLICOLOR` is unset or set to a truthy value, and colors aren't forced, then terminal
+        // support determines whether or not colors are used
+        atty::is(atty::Stream::Stderr)
+    }
+
+    fn windbg_attached() -> bool {
+        todo!()
     }
 }
 
