@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Robbert van der Helm <mail@robbertvanderhelm.nl>"]
 license = "ISC"
 
-description = "An opiniated yet flexible logger catering to the needs of the NIH-plug plugin framework"
+description = "An opinionated yet flexible logger catering to the needs of the NIH-plug plugin framework"
 repository = "https://github.com/robbert-vdh/nih-log"
 keywords = ["log", "logging", "nih-plug"]
 
