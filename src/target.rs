@@ -15,29 +15,13 @@ const NIH_LOG_ENV: &str = "NIH_LOG";
 /// Similar to [`crate::builder::OutputTarget`], but contains the actual data needed to write to the
 /// logger.
 pub enum OutputTargetImpl {
-    /// The default logging target. On Windows this checks whether a Windows debugger is attached
+    /// The default logging target on Windows. This checks whether a Windows debugger is attached
     /// before logging. If there is a debugger, then the message is written using
-    /// `OutputDebugString()`. Otherwise the message is written to STDERR instead. On non-Windows
-    /// platforms this is equivalent to [`OutputTargetImpl`].
-    ///
-    /// # Notes
-    ///
-    /// This dynamic target is the only target that can be overwritten at runtime. The others are
-    /// considered explicit choices and won't be overwritten.
+    /// `OutputDebugString()`. Otherwise the message is written to STDERR instead.
     #[cfg(windows)]
     StderrOrWinDbg(BufferedStandardStream, windbg::WinDbgWriter),
-    /// The default logging target. On Windows this checks whether a Windows debugger is attached
-    /// before logging. If there is a debugger, then the message is written using
-    /// `OutputDebugString()`. Otherwise the message is written to STDERR instead. On non-Windows
-    /// platforms this is equivalent to [`OutputTargetImpl`].
-    ///
-    /// # Notes
-    ///
-    /// This dynamic target is the only target that can be overwritten at runtime. The others are
-    /// considered explicit choices and won't be overwritten.
-    #[cfg(not(windows))]
-    StderrOrWinDbg(BufferedStandardStream),
-    /// Writes directly to STDERR.
+    /// Writes directly to STDERR. The default logging target on non-Windows platforms. May use
+    /// colors colors depending on the environment.
     Stderr(BufferedStandardStream),
     /// Outputs to the Windows debugger using `OutputDebugString()`.
     #[cfg(windows)]
@@ -58,15 +42,6 @@ impl Debug for OutputTargetImpl {
                     &"<stderr stream>"
                 })
                 .field(windbg)
-                .finish(),
-            #[cfg(not(windows))]
-            OutputTargetImpl::StderrOrWinDbg(stderr) => f
-                .debug_tuple("StderrOrWinDbg")
-                .field(if stderr.supports_color() {
-                    &"<stderr stream with color support>"
-                } else {
-                    &"<stderr stream>"
-                })
                 .finish(),
             OutputTargetImpl::Stderr(stderr) => f
                 .debug_tuple("Stderr")
@@ -93,14 +68,6 @@ impl OutputTargetImpl {
             BufferedStandardStream::stderr(stderr_color_support()),
             windbg::WinDbgWriter::default(),
         )
-    }
-
-    /// Construct an [`OutputTargetImpl`] that writes to STDERR with optional color support
-    /// determined by the environment. If a Windows debugger is attached when writing debug output,
-    /// then the output is sent to the Windows debugger instead.
-    #[cfg(not(windows))]
-    pub fn new_stderr_or_windbg() -> Self {
-        OutputTargetImpl::StderrOrWinDbg(BufferedStandardStream::stderr(stderr_color_support()))
     }
 
     /// Construct an [`OutputTargetImpl`] that writes to STDERR with optional color support
@@ -131,11 +98,9 @@ impl OutputTargetImpl {
             OutputTargetImpl::StderrOrWinDbg(_, ref mut windbg) if windbg::attached() => windbg,
             #[cfg(windows)]
             OutputTargetImpl::StderrOrWinDbg(ref mut stderr, _) => stderr,
-            #[cfg(not(windows))]
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) => stderr,
+            OutputTargetImpl::Stderr(ref mut stderr) => stderr,
             #[cfg(windows)]
             OutputTargetImpl::WinDbg(ref mut windbg) => windbg,
-            OutputTargetImpl::Stderr(ref mut stderr) => stderr,
             OutputTargetImpl::File(ref mut file) => file,
         }
     }
@@ -150,23 +115,10 @@ impl OutputTargetImpl {
             }
             #[cfg(windows)]
             OutputTargetImpl::StderrOrWinDbg(_, _) => None,
-            #[cfg(not(windows))]
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) => Some(stderr),
+            OutputTargetImpl::Stderr(ref mut stderr) => Some(stderr),
             #[cfg(windows)]
             OutputTargetImpl::WinDbg(_) => None,
-            OutputTargetImpl::Stderr(ref mut stderr) => Some(stderr),
             OutputTargetImpl::File(_) => None,
-        }
-    }
-
-    /// Whether a target was implicitly chosen and can be overwritten at runtime.
-    pub fn overwritable(&self) -> bool {
-        match self {
-            #[cfg(windows)]
-            OutputTargetImpl::StderrOrWinDbg(_, _) => true,
-            #[cfg(not(windows))]
-            OutputTargetImpl::StderrOrWinDbg(_) => true,
-            _ => false,
         }
     }
 
@@ -195,12 +147,15 @@ impl OutputTargetImpl {
             }
         }
 
-        Self::new_stderr_or_windbg()
+        #[cfg(windows)]
+        return Self::new_stderr_or_windbg();
+        #[cfg(not(windows))]
+        return Self::new_stderr();
     }
 }
 
-/// Whether to use colors when outputting to STDERR. Considers the `CLICOLOR`, `CLICOLOR_FORCE`,
-/// and `NO_COLOR` environment variables, and whether or not STDERR is attached to a real TTY.
+/// Whether to use colors when outputting to STDERR. Considers the `CLICOLOR`, `CLICOLOR_FORCE`, and
+/// `NO_COLOR` environment variables, and whether or not STDERR is attached to a real TTY.
 fn stderr_color_support() -> ColorChoice {
     if let Ok(value) = std::env::var("CLICOLOR_FORCE") {
         if value.trim() != "0" {

@@ -13,8 +13,8 @@ use crate::LOGGER_INSTANCE;
 pub struct LoggerBuilder {
     /// The maximum log level. Set when constructing the builder.
     pub max_log_level: LevelFilter,
-    /// An explicitly set output target. When writing to a file this already contains the writer for
-    /// the file to ensure that it can actually be written to when the logger is created.
+    /// An explicitly set output target. If this is not set then the target is chosen based on the
+    /// presence and contents of the `NIH_LOG` environment variable.
     output_target: Option<OutputTargetImpl>,
 }
 
@@ -121,9 +121,8 @@ impl LoggerBuilder {
         }
     }
 
-    /// Explicitly set the otuput target for the logger. This is normally set using the `NIH_LOG`
-    /// environment variable. If an explicit output target is set, then the output target cannot be
-    /// changed anymore at runtime. Returns an error if the target could not be set.
+    /// Explicitly set the output target for the logger. This is normally set using the `NIH_LOG`
+    /// environment variable. Returns an error if the target could not be set.
     #[allow(clippy::result_large_err)]
     pub fn with_output_target(mut self, target: OutputTarget) -> Result<Self, SetTargetError> {
         self.output_target = Some(match target {
