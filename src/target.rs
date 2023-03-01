@@ -56,12 +56,25 @@ impl Debug for OutputTargetImpl {
 }
 
 impl OutputTargetImpl {
+    /// Construct an [`OutputTargetImpl`] for doing buffered writes to a file.
+    pub fn for_file_path<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
+        let file = File::options().create(true).append(true).open(path)?;
+
+        Ok(Self::File(BufWriter::new(file)))
+    }
+
+    /// Construct a [`BufferedStandardStream`] that writes to STDERR with optional color support
+    /// determined by the environment.
+    pub fn stderr_stream() -> BufferedStandardStream {
+        BufferedStandardStream::stderr(stderr_color_support())
+    }
+
     /// A writer that can be written to using the [`write!()`] and [`writeln!()`] macros. May
     /// perform a syscall to check whether the Windows debugger is attached so this should be reused
     /// for multiple `write!()` calls.
     pub fn writer(&mut self) -> &mut dyn Write {
         match self {
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !Self::windbg_attached() => stderr,
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !windbg_attached() => stderr,
             OutputTargetImpl::Stderr(ref mut stderr) => stderr,
             OutputTargetImpl::StderrOrWinDbg(_) => todo!("windbg"),
             OutputTargetImpl::WinDbg => todo!("windbg"),
@@ -73,9 +86,7 @@ impl OutputTargetImpl {
     /// would return a writer for anything other than an STDERR stream.
     pub fn color_writer(&mut self) -> Option<&mut dyn WriteColor> {
         match self {
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !Self::windbg_attached() => {
-                Some(stderr)
-            }
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !windbg_attached() => Some(stderr),
             OutputTargetImpl::Stderr(ref mut stderr) => Some(stderr),
             OutputTargetImpl::StderrOrWinDbg(_)
             | OutputTargetImpl::WinDbg
@@ -119,51 +130,38 @@ impl OutputTargetImpl {
 
         Self::StderrOrWinDbg(Self::stderr_stream())
     }
+}
 
-    /// Construct an [`OutputTargetImpl`] for doing buffered writes to a file.
-    pub fn for_file_path<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
-        let file = File::options().create(true).append(true).open(path)?;
-
-        Ok(Self::File(BufWriter::new(file)))
-    }
-
-    /// Construct a [`BufferedStandardStream`] that writes to STDERR with optional color support
-    /// determined by the environment.
-    pub fn stderr_stream() -> BufferedStandardStream {
-        BufferedStandardStream::stderr(Self::stderr_color_support())
-    }
-
-    /// Whether to use colors when outputting to STDERR. Considers the `CLICOLOR`, `CLICOLOR_FORCE`,
-    /// and `NO_COLOR` environment variables, and whether or not STDERR is attached to a real TTY.
-    fn stderr_color_support() -> ColorChoice {
-        if let Ok(value) = std::env::var("CLICOLOR_FORCE") {
-            if value.trim() != "0" {
-                return ColorChoice::Always;
-            }
-        }
-
-        if let Ok(value) = std::env::var("NO_COLOR") {
-            if value.trim() != "0" {
-                return ColorChoice::Never;
-            }
-        }
-
-        if let Ok(value) = std::env::var("CLICOLOR") {
-            if value.trim() == "0" {
-                return ColorChoice::Never;
-            }
-        }
-
-        // If `CLICOLOR` is unset or set to a truthy value, and colors aren't forced, then terminal
-        // support determines whether or not colors are used
-        if atty::is(atty::Stream::Stderr) {
-            ColorChoice::Auto
-        } else {
-            ColorChoice::Never
+/// Whether to use colors when outputting to STDERR. Considers the `CLICOLOR`, `CLICOLOR_FORCE`,
+/// and `NO_COLOR` environment variables, and whether or not STDERR is attached to a real TTY.
+fn stderr_color_support() -> ColorChoice {
+    if let Ok(value) = std::env::var("CLICOLOR_FORCE") {
+        if value.trim() != "0" {
+            return ColorChoice::Always;
         }
     }
 
-    fn windbg_attached() -> bool {
-        todo!()
+    if let Ok(value) = std::env::var("NO_COLOR") {
+        if value.trim() != "0" {
+            return ColorChoice::Never;
+        }
     }
+
+    if let Ok(value) = std::env::var("CLICOLOR") {
+        if value.trim() == "0" {
+            return ColorChoice::Never;
+        }
+    }
+
+    // If `CLICOLOR` is unset or set to a truthy value, and colors aren't forced, then terminal
+    // support determines whether or not colors are used
+    if atty::is(atty::Stream::Stderr) {
+        ColorChoice::Auto
+    } else {
+        ColorChoice::Never
+    }
+}
+
+fn windbg_attached() -> bool {
+    todo!()
 }
