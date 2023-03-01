@@ -48,7 +48,13 @@ plugin framework.
   minimum of settings by design. The only configuration options are to control
   the output target and to filter out log messages based on the crate and module
   they're sent from.
-- The logger itself does not try to be realtime-safe. It does however try use
-  buffered IO with small pre-allocated buffers for to avoid tripping
-  [`assert_no_alloc`](https://crates.io/crates/assert_no_alloc/1.1.2) when
-  performing debug prints from a realtime context.
+- The logger itself does not try to be realtime-safe. It does however try to be
+  as performant as reasonably possible.
+  - The logger also tries to detect reentrant logging calls from the same
+    thread, in which case it will log using a new logger instance based on the
+    `NIH_LOG` environment variable. This is very specific behavior is needed to
+    use [`assert_no_alloc`](https://crates.io/crates/assert_no_alloc/1.1.2)'s
+    log feature as an allocation while writing to the logger (for instance
+    because the buffers aren't large enough to format all of the logger's text)
+    should also be logged using the logger, but in that case the log target's
+    mutex will already be locked.

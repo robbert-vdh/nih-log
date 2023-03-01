@@ -2,17 +2,22 @@
 //! API.
 
 use log::{Level, LevelFilter, Log};
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use termcolor::Color;
 use time::UtcOffset;
 
-use crate::target::OutputTargetImpl;
+use crate::target::{OutputTargetImpl, WriteExt};
 
 /// The formatting description for times. Each log message is prefixed by the current time as
 /// `hh:mm:ss`.
 const TIME_FORMAT_DESCRIPTION: &[time::format_description::FormatItem] =
     time::macros::format_description!("[hour]:[minute]:[second]");
+
+thread_local! {
+    static IS_REENTRANT_LOGGING_CALL: Cell<bool> = Cell::new(false);
+}
 
 /// The NIH-log logger. Construct one using the [`LoggerBuilder`].
 pub struct Logger {
@@ -44,35 +49,8 @@ impl Logger {
 
         !self.module_blacklist.contains(target)
     }
-}
 
-impl Log for Logger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= self.max_log_level && !self.target_enabled(metadata.target())
-    }
-
-    fn log(&self, record: &log::Record) {
-        if !self.target_enabled(
-            record
-                .module_path()
-                .unwrap_or_else(|| record.metadata().target()),
-        ) {
-            return;
-        }
-
-        // We currently don't catch panics here because of the assumption that any panics raised are
-        // allocation failures from `assert_no_alloc`, and we already reserve quite a bit of
-        // capacity to prevent additional allocations (though this as a whole of course still isn't
-        // realtime-safe)
-        let mut target = match self.output_target.lock() {
-            Ok(target) => target,
-            Err(err) => err.into_inner(),
-        };
-
-        // If `writer` is a STDERR stream that outputs to a terminal with color support, we can
-        // colorize the log message
-        let mut writer = target.writer();
-
+    fn do_log(&self, mut writer: &mut dyn WriteExt, record: &log::Record) {
         // The log message consists of the following elements:
         // 1) The current time in `hh:mm:ss`
         // 2) The log level, colored if colors are enabled
@@ -80,12 +58,13 @@ impl Log for Logger {
         // 4) (only on the debug and trace levels) The crate and module path
         // 5) (only on the trace level) The file name and line number
         // 6) The actual log message
-        // TODO: Add crate/module filters
         // TODO: We silently ignore failing writes and flushes. Is there anything reasonable we can
         //       do here other than panicking? (which isn't super reasonable)
         let current_time = time::OffsetDateTime::now_utc().to_offset(self.local_time_offset);
         let _ = current_time.format_into(&mut writer, TIME_FORMAT_DESCRIPTION);
 
+        // If `writer` is a STDERR stream that outputs to a terminal with color support, we can
+        // colorize the log message
         match record.level() {
             log::Level::Error => {
                 writer.set_fg_color(Color::Red);
@@ -149,6 +128,51 @@ impl Log for Logger {
 
         // Every line should be flushed immediately to avoid surprises
         let _ = writer.flush();
+    }
+}
+
+impl Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= self.max_log_level && !self.target_enabled(metadata.target())
+    }
+
+    fn log(&self, record: &log::Record) {
+        if !self.target_enabled(
+            record
+                .module_path()
+                .unwrap_or_else(|| record.metadata().target()),
+        ) {
+            return;
+        }
+
+        // See the bullet in the repo's readme. Super specific situations call for super specific
+        // solutions. `assert_no_alloc` with the log feature enabled may cause an allocation that
+        // occurs while logging to be logged. In that case `self.output_target.lock()` would
+        // deadlock. To still allowing getting this log output to the correct location in accordance
+        // with the `NIH_LOG` environment variable we'll explicitly detect reentrant logging calls
+        // since this won't occur in any other situation.q
+        IS_REENTRANT_LOGGING_CALL.with(|is_reentrant_logging_call| {
+            if is_reentrant_logging_call.get() {
+                // This will also allocate, but `assert_no_alloc` allows allocations in its
+                // allocation failure handler
+                let mut target = OutputTargetImpl::default_from_environment();
+                self.do_log(target.writer(), record);
+            } else {
+                is_reentrant_logging_call.set(true);
+
+                // We currently don't catch panics here because of the assumption that any panics
+                // raised are allocation failures from `assert_no_alloc`, and we already reserve
+                // quite a bit of capacity to prevent additional allocations (though this as a whole
+                // of course still isn't realtime-safe)
+                let mut target = match self.output_target.lock() {
+                    Ok(target) => target,
+                    Err(err) => err.into_inner(),
+                };
+                self.do_log(target.writer(), record);
+
+                is_reentrant_logging_call.set(false);
+            }
+        });
     }
 
     fn flush(&self) {
