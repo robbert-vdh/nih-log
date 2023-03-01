@@ -1,7 +1,7 @@
 # NIH-log
 
-![crates.io](https://img.shields.io/crates/v/nih_log)
-![docs.rs](https://img.shields.io/docsrs/nih_log)
+[![crates.io](https://img.shields.io/crates/v/nih_log)](https://crates.io/crates/nih_log)
+[![docs.rs](https://img.shields.io/docsrs/nih_log)](https://docs.rs/nih_log)
 
 A logger for the [log](https://crates.io/crates/log) crate made specifically to
 cater to the needs of the [NIH-plug](https://github.com/robbert-vdh/nih-plug)
