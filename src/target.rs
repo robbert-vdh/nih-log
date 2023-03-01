@@ -58,6 +58,39 @@ impl Debug for OutputTargetImpl {
     }
 }
 
+/// A simple wrapper around the `Write` and `WriteColor` traits to allow coloring text when
+/// supported by the logger target.
+pub trait WriteExt: Write {
+    /// Set the foreground text color. Doesn't do anything if the stream doesn't support colors.
+    fn set_fg_color(&mut self, color: Color);
+
+    /// Reset the foreground text color. Doesn't do anything if the stream doesn't support colors.
+    fn reset_colors(&mut self);
+}
+
+impl WriteExt for BufferedStandardStream {
+    fn set_fg_color(&mut self, color: Color) {
+        let _ = self.set_color(ColorSpec::new().set_fg(Some(color)));
+    }
+
+    fn reset_colors(&mut self) {
+        let _ = self.reset();
+    }
+}
+
+#[cfg(windows)]
+impl WriteExt for windbg::WinDbgWriter {
+    fn set_fg_color(&mut self, _color: Color) {}
+
+    fn reset_colors(&mut self) {}
+}
+
+impl WriteExt for BufWriter<File> {
+    fn set_fg_color(&mut self, _color: Color) {}
+
+    fn reset_colors(&mut self) {}
+}
+
 impl OutputTargetImpl {
     /// Construct an [`OutputTargetImpl`] that writes to STDERR with optional color support
     /// determined by the environment. If a Windows debugger is attached when writing debug output,
@@ -89,10 +122,13 @@ impl OutputTargetImpl {
         Ok(Self::File(BufWriter::new(file)))
     }
 
-    /// A writer that can be written to using the [`write!()`] and [`writeln!()`] macros. May
-    /// perform a syscall to check whether the Windows debugger is attached so this should be reused
-    /// for multiple `write!()` calls.
-    pub fn writer(&mut self) -> &mut dyn Write {
+    /// Returns a writer that can be written to using the [`write!()`] and [`writeln!()`] macros.
+    /// This writer can also be used to color the STDERR stream when outputting to an STDERR stream
+    /// that supports colors. May perform a syscall to check whether the Windows debugger is
+    /// attached so this should be reused for multiple `write!()` calls.
+    ///
+    /// Needs to be a single function since otherwise you'd need to borrow from this struct twice.
+    pub fn writer(&mut self) -> &mut dyn WriteExt {
         match self {
             #[cfg(windows)]
             OutputTargetImpl::StderrOrWinDbg(_, ref mut windbg) if windbg::attached() => windbg,
@@ -102,23 +138,6 @@ impl OutputTargetImpl {
             #[cfg(windows)]
             OutputTargetImpl::WinDbg(ref mut windbg) => windbg,
             OutputTargetImpl::File(ref mut file) => file,
-        }
-    }
-
-    /// The color writer for writing terminal colors. Returns `None` if [`writer()`][Self::writer()]
-    /// would return a writer for anything other than an STDERR stream.
-    pub fn color_writer(&mut self) -> Option<&mut dyn WriteColor> {
-        match self {
-            #[cfg(windows)]
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr, _) if !windbg::attached() => {
-                Some(stderr.get_mut())
-            }
-            #[cfg(windows)]
-            OutputTargetImpl::StderrOrWinDbg(_, _) => None,
-            OutputTargetImpl::Stderr(ref mut stderr) => Some(stderr.get_mut()),
-            #[cfg(windows)]
-            OutputTargetImpl::WinDbg(_) => None,
-            OutputTargetImpl::File(_) => None,
         }
     }
 
