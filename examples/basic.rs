@@ -16,4 +16,13 @@ fn main() {
     log::info!("This is a regular log message");
     log::debug!("This is a debug message, usually only made visible during debug builds");
     log::trace!("This is a trace message, usually hidden unless explicitly opted into");
+
+    // Debug and trace messages contain the module path
+    some_module::log_from_module();
+}
+
+mod some_module {
+    pub fn log_from_module() {
+        log::debug!("This is a debug message printed from another module");
+    }
 }
