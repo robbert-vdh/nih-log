@@ -3,6 +3,7 @@ use log::LevelFilter;
 use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crate::logger::Logger;
 use crate::target::OutputTargetImpl;
@@ -103,9 +104,14 @@ impl LoggerBuilder {
             // - If the `NIH_LOG` environment variable is non-empty, then that is parsed.
             // - Otherwise a dynamic target is used that writes to either STDERR or a WinDbg
             //   debugger depending on whether a Windows debugger is present.
-            output_target: self
-                .output_target
-                .unwrap_or_else(OutputTargetImpl::default_from_environment),
+            output_target: Mutex::new(
+                self.output_target
+                    .unwrap_or_else(OutputTargetImpl::default_from_environment),
+            ),
+            local_time_offset: time::UtcOffset::current_local_offset().unwrap_or_else(|_| {
+                eprintln!("Could not get the local time offset, defaulting to UTC");
+                time::UtcOffset::UTC
+            }),
         };
 
         // We store a global logger instance and then set a static reference to that as the global
