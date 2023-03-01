@@ -15,5 +15,5 @@ fn main() {
     log::warn!("This is a warning");
     log::info!("This is a regular log message");
     log::debug!("This is a debug message, usually only made visible during debug builds");
-    log::debug!("This is a trace message, usually hidden unless explicitly opted into");
+    log::trace!("This is a trace message, usually hidden unless explicitly opted into");
 }
