@@ -39,6 +39,7 @@ plugin framework.
     still active one is used.
   - If `NIH_LOG` was set explicitly, then this is honored and the regular
     behavior won't be overridden.
-- The logger itself does not try to be realtime-safe. It does however avoid
-  locking around the entire logging call so say if a panic happens while
-  logging, that panic can also be logged using the logger.
+- The logger itself does not try to be realtime-safe. It does however reserve a
+  small buffer for logger writes to avoid tripping
+  [`assert_no_alloc`](https://crates.io/crates/assert_no_alloc/1.1.2) when debug
+  printing smaller amounts of text.
