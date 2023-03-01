@@ -6,6 +6,9 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use termcolor::{BufferedStandardStream, ColorChoice, WriteColor};
 
+#[cfg(windows)]
+mod windbg;
+
 /// The environment variable for controlling the logging behavior.
 const NIH_LOG_ENV: &str = "NIH_LOG";
 
@@ -14,7 +17,7 @@ const NIH_LOG_ENV: &str = "NIH_LOG";
 pub enum OutputTargetImpl {
     /// The default logging target. On Windows this checks whether a Windows debugger is attached
     /// before logging. If there is a debugger, then the message is written using
-    /// `OutputDebugStringA()`. Otherwise the message is written to STDERR instead. On non-Windows
+    /// `OutputDebugString()`. Otherwise the message is written to STDERR instead. On non-Windows
     /// platforms this is equivalent to [`OutputTargetImpl`].
     ///
     /// # Notes
@@ -24,7 +27,8 @@ pub enum OutputTargetImpl {
     StderrOrWinDbg(BufferedStandardStream),
     /// Writes directly to STDERR.
     Stderr(BufferedStandardStream),
-    /// Outputs to the Windows debugger using `OutputDebugStringA()`.
+    /// Outputs to the Windows debugger using `OutputDebugString()`.
+    #[cfg(windows)]
     WinDbg,
     /// Writes to the file.
     File(BufWriter<File>),
@@ -33,7 +37,7 @@ pub enum OutputTargetImpl {
 impl Debug for OutputTargetImpl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::StderrOrWinDbg(stderr) => f
+            OutputTargetImpl::StderrOrWinDbg(stderr) => f
                 .debug_tuple("StderrOrWinDbg")
                 .field(if stderr.supports_color() {
                     &"<stderr stream with color support>"
@@ -41,7 +45,7 @@ impl Debug for OutputTargetImpl {
                     &"<stderr stream>"
                 })
                 .finish(),
-            Self::Stderr(stderr) => f
+            OutputTargetImpl::Stderr(stderr) => f
                 .debug_tuple("Stderr")
                 .field(if stderr.supports_color() {
                     &"<stderr stream with color support>"
@@ -49,8 +53,9 @@ impl Debug for OutputTargetImpl {
                     &"<stderr stream>"
                 })
                 .finish(),
-            Self::WinDbg => write!(f, "WinDbg"),
-            Self::File(file) => f.debug_tuple("File").field(file).finish(),
+            #[cfg(windows)]
+            OutputTargetImpl::WinDbg => write!(f, "WinDbg"),
+            OutputTargetImpl::File(file) => f.debug_tuple("File").field(file).finish(),
         }
     }
 }
@@ -74,10 +79,15 @@ impl OutputTargetImpl {
     /// for multiple `write!()` calls.
     pub fn writer(&mut self) -> &mut dyn Write {
         match self {
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !windbg_attached() => stderr,
-            OutputTargetImpl::Stderr(ref mut stderr) => stderr,
+            #[cfg(windows)]
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !windbg::attached() => stderr,
+            #[cfg(windows)]
             OutputTargetImpl::StderrOrWinDbg(_) => todo!("windbg"),
+            #[cfg(windows)]
             OutputTargetImpl::WinDbg => todo!("windbg"),
+            #[cfg(not(windows))]
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) => stderr,
+            OutputTargetImpl::Stderr(ref mut stderr) => stderr,
             OutputTargetImpl::File(ref mut file) => file,
         }
     }
@@ -86,11 +96,16 @@ impl OutputTargetImpl {
     /// would return a writer for anything other than an STDERR stream.
     pub fn color_writer(&mut self) -> Option<&mut dyn WriteColor> {
         match self {
-            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !windbg_attached() => Some(stderr),
+            #[cfg(windows)]
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !windbg::attached() => Some(stderr),
+            #[cfg(windows)]
+            OutputTargetImpl::WinDbg => None,
+            #[cfg(windows)]
+            OutputTargetImpl::StderrOrWinDbg(_) => None,
+            #[cfg(not(windows))]
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) => Some(stderr),
             OutputTargetImpl::Stderr(ref mut stderr) => Some(stderr),
-            OutputTargetImpl::StderrOrWinDbg(_)
-            | OutputTargetImpl::WinDbg
-            | OutputTargetImpl::File(_) => None,
+            OutputTargetImpl::File(_) => None,
         }
     }
 
@@ -98,9 +113,9 @@ impl OutputTargetImpl {
     pub fn overwritable(&self) -> bool {
         match self {
             OutputTargetImpl::StderrOrWinDbg(_) => true,
-            OutputTargetImpl::Stderr(_) | OutputTargetImpl::WinDbg | OutputTargetImpl::File(_) => {
-                false
-            }
+            #[cfg(windows)]
+            OutputTargetImpl::WinDbg => false,
+            OutputTargetImpl::Stderr(_) | OutputTargetImpl::File(_) => false,
         }
     }
 
@@ -114,6 +129,7 @@ impl OutputTargetImpl {
         if nih_log_env_str.eq_ignore_ascii_case("stderr") {
             return Self::Stderr(Self::stderr_stream());
         }
+        #[cfg(windows)]
         if nih_log_env_str.eq_ignore_ascii_case("windbg") {
             return Self::WinDbg;
         }
@@ -160,8 +176,4 @@ fn stderr_color_support() -> ColorChoice {
     } else {
         ColorChoice::Never
     }
-}
-
-fn windbg_attached() -> bool {
-    todo!()
 }

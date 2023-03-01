@@ -24,8 +24,8 @@ pub struct LoggerBuilder {
 pub enum OutputTarget {
     /// Write directly to STDERR.
     Stderr,
-    /// Output to the Windows debugger using `OutputDebugStringA()`.
-    // FIXME: Gate all uses of this behind the Windows platform
+    /// Output to the Windows debugger using `OutputDebugString()`.
+    #[cfg(Windows)]
     WinDbg,
     /// Write the log output to a file.
     File(PathBuf),
@@ -128,6 +128,7 @@ impl LoggerBuilder {
     pub fn with_output_target(mut self, target: OutputTarget) -> Result<Self, SetTargetError> {
         self.output_target = Some(match target {
             OutputTarget::Stderr => OutputTargetImpl::Stderr(OutputTargetImpl::stderr_stream()),
+            #[cfg(Windows)]
             OutputTarget::WinDbg => OutputTargetImpl::WinDbg,
             OutputTarget::File(path) => match OutputTargetImpl::for_file_path(&path) {
                 Ok(target) => target,

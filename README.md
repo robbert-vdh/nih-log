@@ -14,7 +14,7 @@ plugin framework.
   - A value of `stderr` causes the log to be printed to STDERR.
   - _(not yet implemented)_ A value of `windbg` causes the log to be output to
     the Windows debugger using the
-    [`OutputDebugStringA()`](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-outputdebugstringa)
+    [`OutputDebugString()`](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-outputdebugstringw)
     function.
   - Anything else is interpreted as a file name, which causes the log to be
     written to that file instead.
