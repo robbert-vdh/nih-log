@@ -12,8 +12,8 @@ plugin framework.
   variable:
 
   - A value of `stderr` causes the log to be printed to STDERR.
-  - A value of `windbg` causes the log to be output to the Windows debugger
-    using the
+  - _(not yet implemented)_ A value of `windbg` causes the log to be output to
+    the Windows debugger using the
     [`OutputDebugStringA()`](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-outputdebugstringa)
     function.
   - Anything else is interpreted as a file name, which causes the log to be
@@ -22,13 +22,13 @@ plugin framework.
   The latter two options are useful on Windows where accessing the standard IO
   streams may be difficult.
 
-- If `NIH_LOG` is not set, then a dynamic logging output target is used instead.
-  On Windows this causes log messages to be sent to the Windows debugger when
-  one is attached. This check is done just before printing the message to make
-  it possible to attach a debugger to a running process. When the debugger is
-  not attached the output goes directly to STDERR. On non-Windows platforms
-  STDERR is always used.
-- The logger's output can be changed to output to a custom function after the
+- _(not yet implemented)_ If `NIH_LOG` is not set, then a dynamic logging output
+  target is used instead. On Windows this causes log messages to be sent to the
+  Windows debugger when one is attached. This check is done just before printing
+  the message to make it possible to attach a debugger to a running process.
+  When the debugger is not attached the output goes directly to STDERR. On
+  non-Windows platforms STDERR is always used.
+- _(not yet implemented)_ The logger's output can be changed to output to a custom function after the
   logger has been created. This makes it possible to integrate with external
   logging APIs that are not yet available when the logger is first initialized,
   like the CLAP plugin API's [logging

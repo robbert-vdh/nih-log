@@ -4,7 +4,7 @@
 use log::{LevelFilter, Log};
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use termcolor::{BufferedStandardStream, ColorChoice, WriteColor};
 
@@ -68,6 +68,33 @@ impl Debug for OutputTargetImpl {
 }
 
 impl OutputTargetImpl {
+    /// A writer that can be written to using the [`write!()`] and [`writeln!()`] macros. May
+    /// perform a syscall to check whether the Windows debugger is attached so this should be reused
+    /// for multiple `write!()` calls.
+    pub fn writer(&mut self) -> &mut dyn Write {
+        match self {
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !Self::windbg_attached() => stderr,
+            OutputTargetImpl::Stderr(ref mut stderr) => stderr,
+            OutputTargetImpl::StderrOrWinDbg(_) => todo!("windbg"),
+            OutputTargetImpl::WinDbg => todo!("windbg"),
+            OutputTargetImpl::File(ref mut file) => file,
+        }
+    }
+
+    /// The color writer for writing terminal colors. Returns `None` if [`writer()`][Self::writer()]
+    /// would return a writer for anything other than an STDERR stream.
+    pub fn color_writer(&mut self) -> Option<&mut dyn WriteColor> {
+        match self {
+            OutputTargetImpl::StderrOrWinDbg(ref mut stderr) if !Self::windbg_attached() => {
+                Some(stderr)
+            }
+            OutputTargetImpl::Stderr(ref mut stderr) => Some(stderr),
+            OutputTargetImpl::StderrOrWinDbg(_)
+            | OutputTargetImpl::WinDbg
+            | OutputTargetImpl::File(_) => None,
+        }
+    }
+
     /// Whether a target was implicitly chosen and can be overwritten at runtime.
     pub fn overwritable(&self) -> bool {
         match self {
