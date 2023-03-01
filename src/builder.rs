@@ -125,7 +125,7 @@ impl LoggerBuilder {
     /// changed anymore at runtime. Returns an error if the target could not be set.
     pub fn with_output_target(mut self, target: OutputTarget) -> Result<Self, SetTargetError> {
         self.output_target = Some(match target {
-            OutputTarget::Stderr => OutputTargetImpl::Stderr,
+            OutputTarget::Stderr => OutputTargetImpl::Stderr(OutputTargetImpl::stderr_stream()),
             OutputTarget::WinDbg => OutputTargetImpl::WinDbg,
             OutputTarget::File(path) => match OutputTargetImpl::for_file_path(&path) {
                 Ok(target) => target,

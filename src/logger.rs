@@ -2,9 +2,11 @@
 //! API.
 
 use log::{LevelFilter, Log};
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
+use termcolor::{BufferedStandardStream, ColorChoice, WriteColor};
 
 /// The environment variable for controlling the logging behavior.
 const NIH_LOG_ENV: &str = "NIH_LOG";
@@ -21,7 +23,6 @@ pub struct Logger {
 
 /// Similar to [`crate::builder::OutputTarget`], but contains the actual data needed to write to the
 /// logger.
-#[derive(Debug)]
 pub enum OutputTargetImpl {
     /// The default logging target. On Windows this checks whether a Windows debugger is attached
     /// before logging. If there is a debugger, then the message is written using
@@ -32,34 +33,48 @@ pub enum OutputTargetImpl {
     ///
     /// This dynamic target is the only target that can be overwritten at runtime. The others are
     /// considered explicit choices and won't be overwritten.
-    StderrOrWinDbg,
+    StderrOrWinDbg(BufferedStandardStream),
     /// Writes directly to STDERR.
-    Stderr,
+    Stderr(BufferedStandardStream),
     /// Outputs to the Windows debugger using `OutputDebugStringA()`.
     WinDbg,
     /// Writes to the file.
     File(BufWriter<File>),
 }
 
+impl Debug for OutputTargetImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StderrOrWinDbg(stderr) => f
+                .debug_tuple("StderrOrWinDbg")
+                .field(if stderr.supports_color() {
+                    &"<stderr stream with color support>"
+                } else {
+                    &"<stderr stream>"
+                })
+                .finish(),
+            Self::Stderr(stderr) => f
+                .debug_tuple("Stderr")
+                .field(if stderr.supports_color() {
+                    &"<stderr stream with color support>"
+                } else {
+                    &"<stderr stream>"
+                })
+                .finish(),
+            Self::WinDbg => write!(f, "WinDbg"),
+            Self::File(file) => f.debug_tuple("File").field(file).finish(),
+        }
+    }
+}
+
 impl OutputTargetImpl {
     /// Whether a target was implicitly chosen and can be overwritten at runtime.
     pub fn overwritable(&self) -> bool {
         match self {
-            OutputTargetImpl::StderrOrWinDbg => true,
-            OutputTargetImpl::Stderr | OutputTargetImpl::WinDbg | OutputTargetImpl::File(_) => {
+            OutputTargetImpl::StderrOrWinDbg(_) => true,
+            OutputTargetImpl::Stderr(_) | OutputTargetImpl::WinDbg | OutputTargetImpl::File(_) => {
                 false
             }
-        }
-    }
-
-    /// Whether to use ANSI colors when writing to the target.
-    pub fn colorize(&self) -> bool {
-        match self {
-            OutputTargetImpl::Stderr => Self::stderr_supports_colors(),
-            OutputTargetImpl::StderrOrWinDbg if !Self::windbg_attached() => {
-                Self::stderr_supports_colors()
-            }
-            _ => false,
         }
     }
 
@@ -71,7 +86,7 @@ impl OutputTargetImpl {
         let nih_log_env = std::env::var(NIH_LOG_ENV);
         let nih_log_env_str = nih_log_env.as_deref().unwrap_or("");
         if nih_log_env_str.eq_ignore_ascii_case("stderr") {
-            return Self::Stderr;
+            return Self::Stderr(Self::stderr_stream());
         }
         if nih_log_env_str.eq_ignore_ascii_case("windbg") {
             return Self::WinDbg;
@@ -87,39 +102,50 @@ impl OutputTargetImpl {
             }
         }
 
-        Self::StderrOrWinDbg
+        Self::StderrOrWinDbg(Self::stderr_stream())
     }
 
+    /// Construct an [`OutputTargetImpl`] for doing buffered writes to a file.
     pub fn for_file_path<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
         let file = File::options().create(true).append(true).open(path)?;
 
         Ok(Self::File(BufWriter::new(file)))
     }
 
-    /// Whether STDERR is a real TTY or not. Respects the `CLICOLOR`, `CLICOLOR_FORCE`, and
-    /// `NO_COLOR` environment variables.
-    fn stderr_supports_colors() -> bool {
+    /// Construct a [`BufferedStandardStream`] that writes to STDERR with optional color support
+    /// determined by the environment.
+    pub fn stderr_stream() -> BufferedStandardStream {
+        BufferedStandardStream::stderr(Self::stderr_color_support())
+    }
+
+    /// Whether to use colors when outputting to STDERR. Considers the `CLICOLOR`, `CLICOLOR_FORCE`,
+    /// and `NO_COLOR` environment variables, and whether or not STDERR is attached to a real TTY.
+    fn stderr_color_support() -> ColorChoice {
         if let Ok(value) = std::env::var("CLICOLOR_FORCE") {
             if value.trim() != "0" {
-                return true;
+                return ColorChoice::Always;
             }
         }
 
         if let Ok(value) = std::env::var("NO_COLOR") {
             if value.trim() != "0" {
-                return false;
+                return ColorChoice::Never;
             }
         }
 
         if let Ok(value) = std::env::var("CLICOLOR") {
             if value.trim() == "0" {
-                return false;
+                return ColorChoice::Never;
             }
         }
 
         // If `CLICOLOR` is unset or set to a truthy value, and colors aren't forced, then terminal
         // support determines whether or not colors are used
-        atty::is(atty::Stream::Stderr)
+        if atty::is(atty::Stream::Stderr) {
+            ColorChoice::Auto
+        } else {
+            ColorChoice::Never
+        }
     }
 
     fn windbg_attached() -> bool {
