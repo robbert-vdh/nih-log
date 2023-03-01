@@ -8,14 +8,16 @@ plugin framework.
 
 - Log messages are formatted similarly to
   [simplelog](https://crates.io/crates/simplelog). Because simplelog is great.
+- By default the log output goes to STDERR, unless a Windows debugger is
+  attached. In that case the output is sent to the Windows debugger using the
+  [`OutputDebugString()`](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-outputdebugstringw)
+  function. This check is performed at runtime to accommodate debuggers being
+  attached to already running processes.
 - The log's output target can be changed by setting the `NIH_LOG` environment
   variable:
 
   - A value of `stderr` causes the log to be printed to STDERR.
-  - A value of `windbg` causes the log to be output to
-    the Windows debugger using the
-    [`OutputDebugString()`](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-outputdebugstringw)
-    function.
+  - A value of `windbg` causes the log to be output to the Windows debugger.
   - Anything else is interpreted as a file name, which causes the log to be
     written to that file instead.
 
@@ -39,7 +41,11 @@ plugin framework.
     still active one is used.
   - If `NIH_LOG` was set explicitly, then this is honored and the regular
     behavior won't be overridden.
-- The logger itself does not try to be realtime-safe. It does however reserve a
-  small buffer for logger writes to avoid tripping
-  [`assert_no_alloc`](https://crates.io/crates/assert_no_alloc/1.1.2) when debug
-  printing smaller amounts of text.
+- Because NIH-log is opinionated for use with NIH-plug, it only exposes the bare
+  minimum of settings by design. The only configuration options are to control
+  the output target and to filter out log messages based on the crate and module
+  they're sent from.
+- The logger itself does not try to be realtime-safe. It does however try use
+  buffered IO with small pre-allocated buffers for to avoid tripping
+  [`assert_no_alloc`](https://crates.io/crates/assert_no_alloc/1.1.2) when
+  performing debug prints from a realtime context.
