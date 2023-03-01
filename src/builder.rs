@@ -4,7 +4,8 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
 
-use crate::logger::{Logger, OutputTargetImpl};
+use crate::logger::Logger;
+use crate::target::OutputTargetImpl;
 use crate::LOGGER_INSTANCE;
 
 /// Constructs an NIH-log logger.
@@ -123,6 +124,7 @@ impl LoggerBuilder {
     /// Explicitly set the otuput target for the logger. This is normally set using the `NIH_LOG`
     /// environment variable. If an explicit output target is set, then the output target cannot be
     /// changed anymore at runtime. Returns an error if the target could not be set.
+    #[allow(clippy::result_large_err)]
     pub fn with_output_target(mut self, target: OutputTarget) -> Result<Self, SetTargetError> {
         self.output_target = Some(match target {
             OutputTarget::Stderr => OutputTargetImpl::Stderr(OutputTargetImpl::stderr_stream()),

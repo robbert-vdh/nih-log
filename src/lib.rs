@@ -2,6 +2,7 @@ use once_cell::sync::OnceCell;
 
 mod builder;
 mod logger;
+mod target;
 
 pub use builder::{LoggerBuilder, OutputTarget, SetLoggerError, SetTargetError};
 
