@@ -21,8 +21,7 @@ pub struct Logger {
     /// The local time offset. Queried once at startup to avoid having to do this over and over
     /// again.
     pub local_time_offset: UtcOffset,
-    /// The output target for the logger. This may be overwritten at runtime depending on the value
-    /// of [`OutputTargetImpl::overwritable()`].
+    /// The output target for the logger.
     pub output_target: Mutex<OutputTargetImpl>,
 }
 
