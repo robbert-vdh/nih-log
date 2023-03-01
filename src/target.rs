@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use termcolor::{ColorChoice, StandardStream, WriteColor};
+use termcolor::{BufferedStandardStream, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[cfg(windows)]
 mod windbg;
@@ -19,10 +19,10 @@ pub enum OutputTargetImpl {
     /// before logging. If there is a debugger, then the message is written using
     /// `OutputDebugString()`. Otherwise the message is written to STDERR instead.
     #[cfg(windows)]
-    StderrOrWinDbg(BufWriter<StandardStream>, windbg::WinDbgWriter),
+    StderrOrWinDbg(BufferedStandardStream, windbg::WinDbgWriter),
     /// Writes directly to STDERR. The default logging target on non-Windows platforms. May use
     /// colors colors depending on the environment.
-    Stderr(BufWriter<StandardStream>),
+    Stderr(BufferedStandardStream),
     /// Outputs to the Windows debugger using `OutputDebugString()`.
     #[cfg(windows)]
     WinDbg(windbg::WinDbgWriter),
@@ -36,7 +36,7 @@ impl Debug for OutputTargetImpl {
             #[cfg(windows)]
             OutputTargetImpl::StderrOrWinDbg(stderr, windbg) => f
                 .debug_tuple("StderrOrWinDbg")
-                .field(if stderr.get_ref().supports_color() {
+                .field(if stderr.supports_color() {
                     &"<stderr stream with color support>"
                 } else {
                     &"<stderr stream>"
@@ -45,7 +45,7 @@ impl Debug for OutputTargetImpl {
                 .finish(),
             OutputTargetImpl::Stderr(stderr) => f
                 .debug_tuple("Stderr")
-                .field(if stderr.get_ref().supports_color() {
+                .field(if stderr.supports_color() {
                     &"<stderr stream with color support>"
                 } else {
                     &"<stderr stream>"
@@ -65,7 +65,7 @@ impl OutputTargetImpl {
     #[cfg(windows)]
     pub fn new_stderr_or_windbg() -> Self {
         OutputTargetImpl::StderrOrWinDbg(
-            BufWriter::with_capacity(1024, StandardStream::stderr(stderr_color_support())),
+            BufferedStandardStream::stderr(stderr_color_support()),
             windbg::WinDbgWriter::default(),
         )
     }
@@ -73,10 +73,7 @@ impl OutputTargetImpl {
     /// Construct an [`OutputTargetImpl`] that writes to STDERR with optional color support
     /// determined by the environment.
     pub fn new_stderr() -> Self {
-        OutputTargetImpl::Stderr(BufWriter::with_capacity(
-            1024,
-            StandardStream::stderr(stderr_color_support()),
-        ))
+        OutputTargetImpl::Stderr(BufferedStandardStream::stderr(stderr_color_support()))
     }
 
     /// Construct an [`OutputTargetImpl`] that writes to the Windows debugger.
@@ -89,7 +86,7 @@ impl OutputTargetImpl {
     pub fn new_file_path<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
         let file = File::options().create(true).append(true).open(path)?;
 
-        Ok(Self::File(BufWriter::with_capacity(1024, file)))
+        Ok(Self::File(BufWriter::new(file)))
     }
 
     /// A writer that can be written to using the [`write!()`] and [`writeln!()`] macros. May

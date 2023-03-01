@@ -28,8 +28,10 @@ pub struct WinDbgWriter {
 impl Default for WinDbgWriter {
     fn default() -> Self {
         Self {
-            buffer: Vec::with_capacity(1024),
-            utf16_buffer: Vec::with_capacity(1024),
+            // This is the default capacity used for `BufWriter`:
+            // https://github.com/rust-lang/rust/blob/5423745db8b434fcde54888b35f518f00cce00e4/library/std/src/sys_common/io.rs#L1-L3
+            buffer: Vec::with_capacity(8 * 1024),
+            utf16_buffer: Vec::with_capacity(8 * 1024),
         }
     }
 }
