@@ -1,5 +1,6 @@
 ///! A builder interface for the logger.
 use log::LevelFilter;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -13,10 +14,14 @@ use crate::LOGGER_INSTANCE;
 #[derive(Debug)]
 pub struct LoggerBuilder {
     /// The maximum log level. Set when constructing the builder.
-    pub max_log_level: LevelFilter,
+    max_log_level: LevelFilter,
     /// An explicitly set output target. If this is not set then the target is chosen based on the
     /// presence and contents of the `NIH_LOG` environment variable.
     output_target: Option<OutputTargetImpl>,
+    /// Names of crates module paths that should be excluded from the log. Case sensitive, and only
+    /// matches whole crate names and paths. Both the crate name and module path are checked
+    /// separately to allow for a little bit of flexibility.
+    module_blacklist: HashSet<String>,
 }
 
 /// Determines where the logger should write its output. If no explicit target is chosen, then a
@@ -91,6 +96,7 @@ impl LoggerBuilder {
         Self {
             max_log_level,
             output_target: None,
+            module_blacklist: HashSet::new(),
         }
     }
 
@@ -112,6 +118,8 @@ impl LoggerBuilder {
                 eprintln!("Could not get the local time offset, defaulting to UTC");
                 time::UtcOffset::UTC
             }),
+
+            module_blacklist: self.module_blacklist,
         };
 
         // We store a global logger instance and then set a static reference to that as the global
@@ -125,6 +133,21 @@ impl LoggerBuilder {
             }
             Err(_) => Err(SetLoggerError(())),
         }
+    }
+
+    /// Filter out log messages produced by the given crate.
+    pub fn filter_crate(mut self, crate_name: impl Into<String>) -> Self {
+        self.module_blacklist.insert(crate_name.into());
+        self
+    }
+
+    /// Filter out log messages produced by the given module. Module names are matched exactly and
+    /// case sensitively. Filtering based on a module prefix is currently not supported.
+    pub fn filter_module(mut self, crate_name: impl Into<String>) -> Self {
+        // Right now both of these functions do the same thing, in the future we may want to
+        // differentiate between them
+        self.module_blacklist.insert(crate_name.into());
+        self
     }
 
     /// Explicitly set the output target for the logger. This is normally set using the `NIH_LOG`

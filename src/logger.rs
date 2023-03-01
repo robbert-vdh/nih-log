@@ -2,6 +2,7 @@
 //! API.
 
 use log::{Level, LevelFilter, Log};
+use std::collections::HashSet;
 use std::sync::Mutex;
 use termcolor::Color;
 use time::UtcOffset;
@@ -23,15 +24,42 @@ pub struct Logger {
     pub local_time_offset: UtcOffset,
     /// The output target for the logger.
     pub output_target: Mutex<OutputTargetImpl>,
+    /// Names of crates module paths that should be excluded from the log. Case sensitive, and only
+    /// matches whole crate names and paths. Both the crate name and module path are checked
+    /// separately to allow for a little bit of flexibility.
+    pub module_blacklist: HashSet<String>,
+}
+
+impl Logger {
+    /// Check if a target is enabled by comparing it to `self.module_blacklist`. If it contains a
+    /// colon, also check if the first part (assumed to be a crate name) matches the blacklist.
+    pub fn target_enabled(&self, target: &str) -> bool {
+        // The filtering happens by both the crate and module name. We don't have very sophisticated
+        // filtering needs, so let's keep this simple and performant.
+        if let Some((crate_name, _)) = target.split_once(':') {
+            if self.module_blacklist.contains(crate_name) {
+                return false;
+            }
+        }
+
+        !self.module_blacklist.contains(target)
+    }
 }
 
 impl Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        // TODO: Add crate/module filters
-        metadata.level() <= self.max_log_level
+        metadata.level() <= self.max_log_level && !self.target_enabled(metadata.target())
     }
 
     fn log(&self, record: &log::Record) {
+        if !self.target_enabled(
+            record
+                .module_path()
+                .unwrap_or_else(|| record.metadata().target()),
+        ) {
+            return;
+        }
+
         // We currently don't catch panics here because of the assumption that any panics raised are
         // allocation failures from `assert_no_alloc`, and we already reserve quite a bit of
         // capacity to prevent additional allocations (though this as a whole of course still isn't
