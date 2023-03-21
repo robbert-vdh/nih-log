@@ -24,6 +24,9 @@ pub struct Logger {
     /// The maximum log level filter. This is already set globally using [`log::set_max_level()`]
     /// but it's probably a good idea to check it again regardless.
     pub max_log_level: LevelFilter,
+    /// If set to `true`, then the module path is always shown. Useful for debug builds and to
+    /// configure the module blacklist.
+    pub always_show_module_path: bool,
     /// The local time offset. Queried once at startup to avoid having to do this over and over
     /// again.
     pub local_time_offset: UtcOffset,
@@ -114,6 +117,11 @@ impl Logger {
             }
 
             let _ = write!(writer, ": ");
+        } else if self.always_show_module_path {
+            // The spacing is a bit different without a thread name, hence the else if here
+            if let Some(module_path) = record.module_path() {
+                let _ = write!(writer, "{}: ", module_path);
+            }
         }
 
         if record.level() >= Level::Trace {

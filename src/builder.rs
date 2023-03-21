@@ -15,6 +15,9 @@ use crate::LOGGER_INSTANCE;
 pub struct LoggerBuilder {
     /// The maximum log level. Set when constructing the builder.
     max_log_level: LevelFilter,
+    /// If set to `true`, then the module path is always shown. Useful for debug builds and to
+    /// configure the module blacklist.
+    always_show_module_path: bool,
     /// An explicitly set output target. If this is not set then the target is chosen based on the
     /// presence and contents of the `NIH_LOG` environment variable.
     output_target: Option<OutputTargetImpl>,
@@ -95,6 +98,7 @@ impl LoggerBuilder {
     pub fn new(max_log_level: LevelFilter) -> Self {
         Self {
             max_log_level,
+            always_show_module_path: false,
             output_target: None,
             module_blacklist: HashSet::new(),
         }
@@ -103,8 +107,10 @@ impl LoggerBuilder {
     /// Install the configured logger as the global logger. The global logger can only be set once.
     pub fn build_global(self) -> Result<(), SetLoggerError> {
         let max_log_level = self.max_log_level;
+        let always_show_module_path = self.always_show_module_path;
         let logger = Logger {
             max_log_level,
+            always_show_module_path,
             // Picking an output target happens in three steps:
             // - If `LoggerBuilder::with_output_target()` was called, that target is used.
             // - If the `NIH_LOG` environment variable is non-empty, then that is parsed.
@@ -133,6 +139,13 @@ impl LoggerBuilder {
             }
             Err(_) => Err(SetLoggerError(())),
         }
+    }
+
+    /// Always show the module path. Normally this is only shown for the messages on the `Debug`
+    /// level or on higher verbosity levels. Useful for debugging.
+    pub fn always_show_module_path(mut self) -> Self {
+        self.always_show_module_path = true;
+        self
     }
 
     /// Filter out log messages produced by the given crate.
