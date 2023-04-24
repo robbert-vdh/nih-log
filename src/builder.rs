@@ -106,6 +106,20 @@ impl LoggerBuilder {
 
     /// Install the configured logger as the global logger. The global logger can only be set once.
     pub fn build_global(self) -> Result<(), SetLoggerError> {
+        // The time crate prevents us from getting the local time offset on Linux because other
+        // threads may modify the environment. When this logger is being initialized that should not
+        // be the case.
+        unsafe {
+            time::util::local_offset::set_soundness(time::util::local_offset::Soundness::Unsound)
+        };
+        let local_time_offset = time::UtcOffset::current_local_offset().unwrap_or_else(|_| {
+            eprintln!("Could not get the local time offset, defaulting to UTC");
+            time::UtcOffset::UTC
+        });
+        unsafe {
+            time::util::local_offset::set_soundness(time::util::local_offset::Soundness::Sound)
+        };
+
         let max_log_level = self.max_log_level;
         let always_show_module_path = self.always_show_module_path;
         let logger = Logger {
@@ -120,10 +134,7 @@ impl LoggerBuilder {
                 self.output_target
                     .unwrap_or_else(OutputTargetImpl::default_from_environment),
             ),
-            local_time_offset: time::UtcOffset::current_local_offset().unwrap_or_else(|_| {
-                eprintln!("Could not get the local time offset, defaulting to UTC");
-                time::UtcOffset::UTC
-            }),
+            local_time_offset,
 
             module_blacklist: self.module_blacklist,
         };
