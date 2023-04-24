@@ -1,6 +1,6 @@
 [package]
 name = "nih_log"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = ["Robbert van der Helm <mail@robbertvanderhelm.nl>"]
 license = "ISC"
